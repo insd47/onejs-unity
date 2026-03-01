@@ -554,75 +554,75 @@ export const transformUtilities = {
     ),
     // Scale (uniform)
     ...Object.fromEntries(
-        Object.entries(scale).map(([key, value]) => [`scale-${key}`, { "scale": `${value} ${value}` }])
+        Object.entries(scale).map(([key, value]) => [`scale-${key}`, { "--tw-scale-x": value, "--tw-scale-y": value, "scale": "var(--tw-scale-x) var(--tw-scale-y)" }])
     ),
     // Scale X
     ...Object.fromEntries(
-        Object.entries(scale).map(([key, value]) => [`scale-x-${key}`, { "scale": `${value} 1` }])
+        Object.entries(scale).map(([key, value]) => [`scale-x-${key}`, { "--tw-scale-x": value, "scale": "var(--tw-scale-x) var(--tw-scale-y)" }])
     ),
     // Scale Y
     ...Object.fromEntries(
-        Object.entries(scale).map(([key, value]) => [`scale-y-${key}`, { "scale": `1 ${value}` }])
+        Object.entries(scale).map(([key, value]) => [`scale-y-${key}`, { "--tw-scale-y": value, "scale": "var(--tw-scale-x) var(--tw-scale-y)" }])
     ),
     // Negative scale (uniform)
     ...Object.fromEntries(
-        Object.entries(scale).filter(([k]) => k !== "0").map(([key, value]) => [`-scale-${key}`, { "scale": `${-value} ${-value}` }])
+        Object.entries(scale).filter(([k]) => k !== "0").map(([key, value]) => [`-scale-${key}`, { "--tw-scale-x": `-${value}`, "--tw-scale-y": `-${value}`, "scale": "var(--tw-scale-x) var(--tw-scale-y)" }])
     ),
     // Negative scale X
     ...Object.fromEntries(
-        Object.entries(scale).filter(([k]) => k !== "0").map(([key, value]) => [`-scale-x-${key}`, { "scale": `${-value} 1` }])
+        Object.entries(scale).filter(([k]) => k !== "0").map(([key, value]) => [`-scale-x-${key}`, { "--tw-scale-x": `-${value}`, "scale": "var(--tw-scale-x) var(--tw-scale-y)" }])
     ),
     // Negative scale Y
     ...Object.fromEntries(
-        Object.entries(scale).filter(([k]) => k !== "0").map(([key, value]) => [`-scale-y-${key}`, { "scale": `1 ${-value}` }])
+        Object.entries(scale).filter(([k]) => k !== "0").map(([key, value]) => [`-scale-y-${key}`, { "--tw-scale-y": `-${value}`, "scale": "var(--tw-scale-x) var(--tw-scale-y)" }])
     ),
     // Translate (uniform, using spacing values)
     ...Object.fromEntries(
-        Object.entries(spacing).map(([key, value]) => [`translate-${key}`, { "translate": `${value} ${value}` }])
+        Object.entries(spacing).map(([key, value]) => [`translate-${key}`, { "--tw-translate-x": value, "--tw-translate-y": value, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Translate X (using spacing values)
     ...Object.fromEntries(
-        Object.entries(spacing).map(([key, value]) => [`translate-x-${key}`, { "translate": `${value} 0` }])
+        Object.entries(spacing).map(([key, value]) => [`translate-x-${key}`, { "--tw-translate-x": value, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Translate Y (using spacing values)
     ...Object.fromEntries(
-        Object.entries(spacing).map(([key, value]) => [`translate-y-${key}`, { "translate": `0 ${value}` }])
+        Object.entries(spacing).map(([key, value]) => [`translate-y-${key}`, { "--tw-translate-y": value, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Translate (uniform, using percentage values)
     ...Object.fromEntries(
-        Object.entries(percentages).map(([key, value]) => [`translate-${key}`, { "translate": `${value} ${value}` }])
+        Object.entries(percentages).map(([key, value]) => [`translate-${key}`, { "--tw-translate-x": value, "--tw-translate-y": value, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Translate X (using percentage values)
     ...Object.fromEntries(
-        Object.entries(percentages).map(([key, value]) => [`translate-x-${key}`, { "translate": `${value} 0` }])
+        Object.entries(percentages).map(([key, value]) => [`translate-x-${key}`, { "--tw-translate-x": value, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Translate Y (using percentage values)
     ...Object.fromEntries(
-        Object.entries(percentages).map(([key, value]) => [`translate-y-${key}`, { "translate": `0 ${value}` }])
+        Object.entries(percentages).map(([key, value]) => [`translate-y-${key}`, { "--tw-translate-y": value, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Negative translate (uniform, using spacing values)
     ...Object.fromEntries(
-        Object.entries(spacing).filter(([k]) => k !== "0" && k !== "px").map(([key, value]) => [`-translate-${key}`, { "translate": `-${value} -${value}` }])
+        Object.entries(spacing).filter(([k]) => k !== "0" && k !== "px").map(([key, value]) => [`-translate-${key}`, { "--tw-translate-x": `-${value}`, "--tw-translate-y": `-${value}`, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Negative translate X (using spacing values)
     ...Object.fromEntries(
-        Object.entries(spacing).filter(([k]) => k !== "0" && k !== "px").map(([key, value]) => [`-translate-x-${key}`, { "translate": `-${value} 0` }])
+        Object.entries(spacing).filter(([k]) => k !== "0" && k !== "px").map(([key, value]) => [`-translate-x-${key}`, { "--tw-translate-x": `-${value}`, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Negative translate Y (using spacing values)
     ...Object.fromEntries(
-        Object.entries(spacing).filter(([k]) => k !== "0" && k !== "px").map(([key, value]) => [`-translate-y-${key}`, { "translate": `0 -${value}` }])
+        Object.entries(spacing).filter(([k]) => k !== "0" && k !== "px").map(([key, value]) => [`-translate-y-${key}`, { "--tw-translate-y": `-${value}`, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Negative translate (uniform, using percentage values)
     ...Object.fromEntries(
-        Object.entries(percentages).map(([key, value]) => [`-translate-${key}`, { "translate": `-${value} -${value}` }])
+        Object.entries(percentages).map(([key, value]) => [`-translate-${key}`, { "--tw-translate-x": `-${value}`, "--tw-translate-y": `-${value}`, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Negative translate X (using percentage values)
     ...Object.fromEntries(
-        Object.entries(percentages).map(([key, value]) => [`-translate-x-${key}`, { "translate": `-${value} 0` }])
+        Object.entries(percentages).map(([key, value]) => [`-translate-x-${key}`, { "--tw-translate-x": `-${value}`, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Negative translate Y (using percentage values)
     ...Object.fromEntries(
-        Object.entries(percentages).map(([key, value]) => [`-translate-y-${key}`, { "translate": `0 -${value}` }])
+        Object.entries(percentages).map(([key, value]) => [`-translate-y-${key}`, { "--tw-translate-y": `-${value}`, "translate": "var(--tw-translate-x) var(--tw-translate-y)" }])
     ),
     // Transform origin
     "origin-center": { "transform-origin": "center" },
