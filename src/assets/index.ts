@@ -2,13 +2,19 @@
  * Asset loading utilities for OneJS
  *
  * Usage:
- *   import { loadImage, loadText, loadJson, loadFont } from "onejs-unity/assets"
- *
- *   // Load package assets (prefixed with @package-name/)
- *   const tex = await loadImage("@rainbow-sample/bg.png")
+ *   import { loadImage, loadImageFromUrl, loadText, loadJson, loadFont } from "onejs-unity/assets"
  *
  *   // Load user assets (from App/assets/)
- *   const logo = await loadImage("images/logo.png")
+ *   const logo = loadImage("images/logo.png")
+ *
+ *   // Load from absolute path (e.g., Steam workshop cache, user save dir)
+ *   const thumb = loadImage("/absolute/path/to/thumbnail.png")
+ *
+ *   // Load from URL
+ *   const remote = await loadImageFromUrl("https://example.com/image.jpg")
+ *
+ *   // Load package assets (prefixed with @package-name/)
+ *   const tex = loadImage("@rainbow-sample/bg.png")
  */
 
 declare const CS: any
@@ -85,11 +91,16 @@ function loadManifest(): AssetManifest {
 /**
  * Resolve an asset path to a full file path
  *
- * In Editor: resolves to working directory paths
- * In Build: resolves to StreamingAssets
+ * - Absolute paths are returned as-is (for loading from arbitrary locations)
+ * - Relative paths resolve to working directory (Editor) or StreamingAssets (Build)
  */
 function resolveAssetPath(assetPath: string): string {
     const Path = CS.System.IO.Path
+
+    // Absolute paths bypass asset resolution entirely
+    if (Path.IsPathRooted(assetPath)) {
+        return assetPath
+    }
 
     if (isEditor()) {
         const workingDir = getWorkingDir()
@@ -120,12 +131,14 @@ function resolveAssetPath(assetPath: string): string {
 }
 
 /**
- * Load an image from an asset path. Supports raster images (PNG, JPG) and SVG files.
+ * Load an image from an asset path or absolute file path.
+ * Supports raster images (PNG, JPG) and SVG files.
  *
  * - Raster images return a Texture2D
  * - SVG files return a VectorImage (parsed and tessellated at runtime)
+ * - Absolute paths load directly from disk (for user save dirs, Steam cache, etc.)
  *
- * @param assetPath - Relative path (e.g., "images/logo.png", "icons/star.svg")
+ * @param assetPath - Relative path (e.g., "images/logo.png") or absolute path
  * @returns Texture2D or VectorImage
  */
 export function loadImage(assetPath: string): any {
@@ -255,6 +268,24 @@ export function assetExists(assetPath: string): boolean {
  */
 export function getAssetPath(assetPath: string): string {
     return resolveAssetPath(assetPath)
+}
+
+/**
+ * Load an image from a URL. Returns a Texture2D.
+ * Uses UnityWebRequestTexture under the hood for efficient downloading and decoding.
+ *
+ * @param url - The image URL to fetch
+ * @returns Promise resolving to a Texture2D, or null on failure
+ *
+ * @example
+ * const tex = await loadImageFromUrl("https://steamcdn.example.com/thumb.jpg")
+ * // Use with Image component
+ * <Image image={tex} style={{ width: 128, height: 128 }} />
+ * // Or as backgroundImage
+ * <View style={{ backgroundImage: tex, width: 128, height: 128 }} />
+ */
+export async function loadImageFromUrl(url: string): Promise<any> {
+    return await CS.OneJS.Network.LoadTextureFromUrl(url)
 }
 
 /**
