@@ -394,10 +394,138 @@ function parseArbitraryValue(className) {
 }
 
 /**
+ * Flatten a (possibly nested) Tailwind color config into a single-level
+ * map of dash-separated keys. Mirrors Tailwind's own behavior:
+ *   { primary: { DEFAULT: "#123", 1: "#456" } }
+ *     => { primary: "#123", "primary-1": "#456" }
+ * Non-object values pass through untouched.
+ */
+function flattenColors(colorsObj) {
+    const out = {}
+    for (const [key, value] of Object.entries(colorsObj || {})) {
+        if (value == null) continue
+        if (typeof value === "string") {
+            out[key] = value
+            continue
+        }
+        if (typeof value === "object") {
+            for (const [subKey, subValue] of Object.entries(value)) {
+                if (typeof subValue !== "string") continue
+                if (subKey === "DEFAULT") {
+                    out[key] = subValue
+                } else {
+                    out[`${key}-${subKey}`] = subValue
+                }
+            }
+        }
+    }
+    return out
+}
+
+/**
+ * Build extra utilities from a user's tailwind.config.js export.
+ * Supports `theme.extend.{colors,spacing,fontFamily}` and `plugins`
+ * (functions that receive `{ addUtilities }`).
+ *
+ * The return value is a { className: declarations } map shaped the
+ * same as `allUtilities`, so it can be used as a fallback lookup
+ * in `generateUSS`.
+ */
+export function buildExtraUtilities(userConfig) {
+    const extra = {}
+    if (!userConfig || typeof userConfig !== "object") return extra
+    const extend = (userConfig.theme && userConfig.theme.extend) || {}
+
+    // Extended colors -> bg-*, text-*, border-* utilities
+    if (extend.colors) {
+        const flat = flattenColors(extend.colors)
+        for (const [colorKey, colorValue] of Object.entries(flat)) {
+            extra[`bg-${colorKey}`] = { "background-color": colorValue }
+            extra[`text-${colorKey}`] = { "color": colorValue }
+            extra[`border-${colorKey}`] = { "border-color": colorValue }
+        }
+    }
+
+    // Extended spacing -> padding/margin/width/height utilities.
+    // Mirrors the subset of prefixes that the hardcoded spacing scale
+    // generates in utilities.mjs.
+    if (extend.spacing) {
+        for (const [key, value] of Object.entries(extend.spacing)) {
+            const v = String(value)
+            extra[`p-${key}`] = { "padding-top": v, "padding-right": v, "padding-bottom": v, "padding-left": v }
+            extra[`px-${key}`] = { "padding-left": v, "padding-right": v }
+            extra[`py-${key}`] = { "padding-top": v, "padding-bottom": v }
+            extra[`pt-${key}`] = { "padding-top": v }
+            extra[`pr-${key}`] = { "padding-right": v }
+            extra[`pb-${key}`] = { "padding-bottom": v }
+            extra[`pl-${key}`] = { "padding-left": v }
+            extra[`m-${key}`] = { "margin-top": v, "margin-right": v, "margin-bottom": v, "margin-left": v }
+            extra[`mx-${key}`] = { "margin-left": v, "margin-right": v }
+            extra[`my-${key}`] = { "margin-top": v, "margin-bottom": v }
+            extra[`mt-${key}`] = { "margin-top": v }
+            extra[`mr-${key}`] = { "margin-right": v }
+            extra[`mb-${key}`] = { "margin-bottom": v }
+            extra[`ml-${key}`] = { "margin-left": v }
+            extra[`w-${key}`] = { "width": v }
+            extra[`h-${key}`] = { "height": v }
+            extra[`min-w-${key}`] = { "min-width": v }
+            extra[`max-w-${key}`] = { "max-width": v }
+            extra[`min-h-${key}`] = { "min-height": v }
+            extra[`max-h-${key}`] = { "max-height": v }
+        }
+    }
+
+    // Extended fontFamily -> font-* utilities.
+    // Values can be a string or an array (first element is used).
+    // Maps to the USS `-unity-font-definition` property, which is how
+    // UI Toolkit references a FontAsset; callers are responsible for
+    // supplying a resource path that Unity can resolve.
+    if (extend.fontFamily) {
+        for (const [key, value] of Object.entries(extend.fontFamily)) {
+            const fontName = Array.isArray(value) ? value[0] : value
+            if (typeof fontName !== "string" || !fontName) continue
+            extra[`font-${key}`] = { "-unity-font-definition": `resource("${fontName}")` }
+        }
+    }
+
+    // User plugin functions. Each receives a tiny Tailwind-shaped API
+    // so existing `({ addUtilities }) => addUtilities({ ".foo": {...} })`
+    // plugins can be reused without modification. We only implement the
+    // `addUtilities` entry; plugins that need theme helpers or variants
+    // will have to be rewritten.
+    if (Array.isArray(userConfig.plugins)) {
+        const api = {
+            addUtilities(utils) {
+                if (!utils || typeof utils !== "object") return
+                for (const [rawSelector, decls] of Object.entries(utils)) {
+                    if (!decls || typeof decls !== "object") continue
+                    // Accept ".class-name" or "class-name" — we strip the
+                    // leading dot so the key shape matches allUtilities.
+                    const base = rawSelector.startsWith(".") ? rawSelector.slice(1) : rawSelector
+                    extra[base] = { ...(extra[base] || {}), ...decls }
+                }
+            },
+        }
+        for (const plugin of userConfig.plugins) {
+            if (typeof plugin === "function") {
+                try {
+                    plugin(api)
+                } catch (err) {
+                    console.warn(`[tailwind] plugin threw: ${err.message}`)
+                }
+            }
+        }
+    }
+
+    return extra
+}
+
+/**
  * Generate USS for a set of class names
  */
 export function generateUSS(classNames, options = {}) {
-    const { includeReset = false } = options
+    const { includeReset = false, userConfig = null } = options
+    const extraUtilities = buildExtraUtilities(userConfig)
     const rules = []
     const breakpointRules = {} // Group by breakpoint
 
@@ -410,8 +538,9 @@ export function generateUSS(classNames, options = {}) {
     for (const className of classNames) {
         const { base, variant, breakpoint } = parseClassName(className)
 
-        // Look up the base utility
-        let declarations = allUtilities[base]
+        // Look up the base utility - check the hardcoded set first, then
+        // any user-defined utilities from tailwind.config.js
+        let declarations = allUtilities[base] || extraUtilities[base]
 
         // If not found, try to parse as arbitrary value
         if (!declarations) {
@@ -497,4 +626,5 @@ export default {
     parseClassName,
     generateUSS,
     generateFromFiles,
+    buildExtraUtilities,
 }

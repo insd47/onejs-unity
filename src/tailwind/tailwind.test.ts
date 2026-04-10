@@ -4,6 +4,7 @@ import {
     escapeClassName,
     parseClassName,
     generateUSS,
+    buildExtraUtilities,
 } from "./generator.mjs"
 
 // ============================================================================
@@ -473,5 +474,196 @@ describe("end-to-end: source code to USS", () => {
         expect(uss).toContain(":hover")
         expect(uss).toContain("hover_c_bg-blue-600")
         expect(uss).toContain("hover_c_bg-gray-400")
+    })
+})
+
+// ============================================================================
+// buildExtraUtilities - userConfig ingestion (tailwind.config.js support)
+// ============================================================================
+
+describe("buildExtraUtilities", () => {
+    it("returns an empty object for null/undefined config", () => {
+        expect(buildExtraUtilities(null as any)).toEqual({})
+        expect(buildExtraUtilities(undefined as any)).toEqual({})
+    })
+
+    it("ignores configs with no theme or plugins", () => {
+        expect(buildExtraUtilities({})).toEqual({})
+        expect(buildExtraUtilities({ theme: {} })).toEqual({})
+        expect(buildExtraUtilities({ theme: { extend: {} } })).toEqual({})
+    })
+
+    it("expands extended colors into bg/text/border utilities", () => {
+        const extra = buildExtraUtilities({
+            theme: { extend: { colors: { brand: "#112233" } } },
+        })
+        expect(extra["bg-brand"]).toEqual({ "background-color": "#112233" })
+        expect(extra["text-brand"]).toEqual({ "color": "#112233" })
+        expect(extra["border-brand"]).toEqual({ "border-color": "#112233" })
+    })
+
+    it("flattens nested color objects, mapping DEFAULT to the parent name", () => {
+        const extra = buildExtraUtilities({
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { DEFAULT: "#000000", 1: "#111111", 2: "#222222" },
+                    },
+                },
+            },
+        })
+        expect(extra["bg-primary"]).toEqual({ "background-color": "#000000" })
+        expect(extra["bg-primary-1"]).toEqual({ "background-color": "#111111" })
+        expect(extra["bg-primary-2"]).toEqual({ "background-color": "#222222" })
+    })
+
+    it("generates spacing utilities for padding/margin/width/height", () => {
+        const extra = buildExtraUtilities({
+            theme: { extend: { spacing: { huge: "200px" } } },
+        })
+        expect(extra["p-huge"]).toMatchObject({ "padding-top": "200px", "padding-left": "200px" })
+        expect(extra["px-huge"]).toEqual({ "padding-left": "200px", "padding-right": "200px" })
+        expect(extra["m-huge"]).toMatchObject({ "margin-top": "200px" })
+        expect(extra["w-huge"]).toEqual({ "width": "200px" })
+        expect(extra["h-huge"]).toEqual({ "height": "200px" })
+        expect(extra["max-w-huge"]).toEqual({ "max-width": "200px" })
+    })
+
+    it("maps extended fontFamily to font-* with -unity-font-definition", () => {
+        const extra = buildExtraUtilities({
+            theme: {
+                extend: {
+                    fontFamily: {
+                        galmuri11: ["UI/Fonts/Galmuri11 SDF"],
+                        inter: "UI/Fonts/Inter SDF",
+                    },
+                },
+            },
+        })
+        expect(extra["font-galmuri11"]).toEqual({
+            "-unity-font-definition": `resource("UI/Fonts/Galmuri11 SDF")`,
+        })
+        expect(extra["font-inter"]).toEqual({
+            "-unity-font-definition": `resource("UI/Fonts/Inter SDF")`,
+        })
+    })
+
+    it("runs plugin functions that call addUtilities", () => {
+        const extra = buildExtraUtilities({
+            plugins: [
+                ({ addUtilities }: any) => {
+                    addUtilities({
+                        ".flex-center": { "align-items": "center", "justify-content": "center" },
+                        "tint-primary": { "-unity-background-image-tint-color": "#123456" },
+                    })
+                },
+            ],
+        })
+        expect(extra["flex-center"]).toEqual({
+            "align-items": "center",
+            "justify-content": "center",
+        })
+        expect(extra["tint-primary"]).toEqual({
+            "-unity-background-image-tint-color": "#123456",
+        })
+    })
+
+    it("is resilient to plugins that throw", () => {
+        const extra = buildExtraUtilities({
+            plugins: [
+                () => { throw new Error("boom") },
+                ({ addUtilities }: any) => addUtilities({ ".ok": { color: "#fff" } }),
+            ],
+        })
+        expect(extra["ok"]).toEqual({ color: "#fff" })
+    })
+})
+
+// ============================================================================
+// generateUSS with userConfig - theme extension end-to-end
+// ============================================================================
+
+describe("generateUSS with userConfig", () => {
+    it("emits USS rules for extended color utilities", () => {
+        const uss = generateUSS(new Set(["bg-brand", "text-brand"]), {
+            userConfig: {
+                theme: { extend: { colors: { brand: "#abcdef" } } },
+            },
+        })
+        expect(uss).toContain(".bg-brand")
+        expect(uss).toContain("background-color: #abcdef")
+        expect(uss).toContain(".text-brand")
+        expect(uss).toContain("color: #abcdef")
+    })
+
+    it("emits USS rules for nested color palettes (primary-1, primary-2, ...)", () => {
+        const uss = generateUSS(new Set(["bg-primary", "bg-primary-1"]), {
+            userConfig: {
+                theme: {
+                    extend: {
+                        colors: {
+                            primary: { DEFAULT: "#000", 1: "#111" },
+                        },
+                    },
+                },
+            },
+        })
+        expect(uss).toContain(".bg-primary")
+        expect(uss).toContain("background-color: #000")
+        expect(uss).toContain(".bg-primary-1")
+        expect(uss).toContain("background-color: #111")
+    })
+
+    it("supports hover: variants on user-defined colors", () => {
+        const uss = generateUSS(new Set(["hover:bg-brand"]), {
+            userConfig: {
+                theme: { extend: { colors: { brand: "#ff0055" } } },
+            },
+        })
+        expect(uss).toContain("hover_c_bg-brand")
+        expect(uss).toContain(":hover")
+        expect(uss).toContain("background-color: #ff0055")
+    })
+
+    it("emits plugin-provided utilities", () => {
+        const uss = generateUSS(new Set(["flex-center"]), {
+            userConfig: {
+                plugins: [
+                    ({ addUtilities }: any) => {
+                        addUtilities({
+                            ".flex-center": {
+                                "align-items": "center",
+                                "justify-content": "center",
+                            },
+                        })
+                    },
+                ],
+            },
+        })
+        expect(uss).toContain(".flex-center")
+        expect(uss).toContain("align-items: center")
+        expect(uss).toContain("justify-content: center")
+    })
+
+    it("falls back to hardcoded utilities when user config is empty", () => {
+        const uss = generateUSS(new Set(["p-4", "bg-blue-500"]), {
+            userConfig: { theme: { extend: {} } },
+        })
+        expect(uss).toContain(".p-4")
+        expect(uss).toContain("padding-top: 16px")
+        expect(uss).toContain(".bg-blue-500")
+    })
+
+    it("user-defined utilities do not override hardcoded utilities with the same name", () => {
+        // Hardcoded .p-4 comes from the default spacing scale (16px).
+        // Even if the user declares a conflicting .p-4 via spacing extension,
+        // the lookup prefers allUtilities first, preserving the default.
+        const uss = generateUSS(new Set(["p-4"]), {
+            userConfig: {
+                theme: { extend: { spacing: { "4": "999px" } } },
+            },
+        })
+        expect(uss).toContain("padding-top: 16px")
+        expect(uss).not.toContain("999px")
     })
 })

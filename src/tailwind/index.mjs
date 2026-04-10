@@ -17,4 +17,5 @@ export {
     parseClassName,
     generateUSS,
     generateFromFiles,
+    buildExtraUtilities,
 } from "./generator.mjs"
