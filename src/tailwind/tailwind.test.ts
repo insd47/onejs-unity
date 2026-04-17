@@ -392,6 +392,26 @@ describe("generateUSS", () => {
         expect(uss).not.toContain(":peer-focus")
     })
 
+    it("expands [&>child] arbitrary variant to a descendant selector", () => {
+        // [&>TextElement]:bg-blue-500 must substitute & with the class
+        // selector and produce ".lb_amp_gt_TextElement_rb_c_bg-blue-500>TextElement",
+        // not attach the raw bracket string as a pseudo-class (which Unity
+        // USS would reject).
+        const uss = generateUSS(new Set(["[&>TextElement]:bg-blue-500"]))
+        expect(uss).toContain(
+            "._lb__amp__gt_TextElement_rb__c_bg-blue-500>TextElement",
+        )
+        expect(uss).not.toContain(":[&")
+        expect(uss).not.toContain(":&")
+    })
+
+    it("expands [&.my-state] arbitrary variant to a compound selector", () => {
+        const uss = generateUSS(new Set(["[&.active]:bg-blue-500"]))
+        expect(uss).toContain(
+            "._lb__amp__d_active_rb__c_bg-blue-500.active",
+        )
+    })
+
     it("generates USS with breakpoint ancestor selector", () => {
         const uss = generateUSS(new Set(["lg:p-8"]))
         expect(uss).toContain(".lg .lg_c_p-8")

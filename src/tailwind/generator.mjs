@@ -434,8 +434,17 @@ export function generateUSS(classNames, options = {}) {
         // sibling combinator, NOT a pseudo-class on the target element. Naive
         // `${selector}:${variant}` produced e.g. `.group-focus_c_X:group-focus`
         // which Unity's USS parser rejects with "Unknown pseudo class 'group-focus'".
+        //
+        // Arbitrary variants wrap a raw selector fragment in square brackets,
+        // e.g. `[&>TextElement]:ml-[6px]`. `&` stands for the current class
+        // selector and must be substituted in; the brackets are stripped.
+        // Without this, `:${variant}` produced `.escaped:[&>TextElement]`
+        // which is invalid USS.
         let selector
-        if (variant && variant.startsWith("group-")) {
+        if (variant && variant.startsWith("[") && variant.endsWith("]")) {
+            const rawSelector = variant.slice(1, -1)
+            selector = rawSelector.replace(/&/g, `.${escapedClass}`)
+        } else if (variant && variant.startsWith("group-")) {
             const pseudo = variant.slice("group-".length)
             selector = `.group:${pseudo} .${escapedClass}`
         } else if (variant && variant.startsWith("peer-")) {
