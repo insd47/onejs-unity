@@ -412,6 +412,25 @@ describe("generateUSS", () => {
         )
     })
 
+    it("supports arbitrary two-value translate via underscore", () => {
+        // translate-[-50%_50%] must emit `translate: -50% 50%`, not treat
+        // the underscore literally or leave the value unsplit. Escape: `%`
+        // becomes `_p_`; the literal underscore between the two values is
+        // preserved as-is, so the escaped class ends `...50_p__50_p__rb_`.
+        const uss = generateUSS(new Set(["translate-[-50%_50%]"]))
+        expect(uss).toContain("translate-_lb_-50_p__50_p__rb_")
+        expect(uss).toContain("translate: -50% 50%")
+    })
+
+    it("applies tailwind /N opacity modifier to arbitrary hex colors", () => {
+        // Built-in colors are pre-expanded with opacity in utilities.mjs
+        // (8-digit hex), so this codepath is exercised by arbitrary values
+        // and user-injected colors. Use an arbitrary hex here as the
+        // test-reachable surrogate for user colors.
+        const uss = generateUSS(new Set(["bg-[#ff5733]/50"]))
+        expect(uss).toMatch(/rgba\(\s*255\s*,\s*87\s*,\s*51\s*,\s*0\.5\s*\)/)
+    })
+
     it("generates USS with breakpoint ancestor selector", () => {
         const uss = generateUSS(new Set(["lg:p-8"]))
         expect(uss).toContain(".lg .lg_c_p-8")
