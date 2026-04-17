@@ -431,6 +431,11 @@ describe("generateUSS", () => {
         expect(uss).toMatch(/rgba\(\s*255\s*,\s*87\s*,\s*51\s*,\s*0\.5\s*\)/)
     })
 
+    it("applies tailwind /[0.xx] arbitrary-decimal opacity modifier", () => {
+        const uss = generateUSS(new Set(["bg-[#ff5733]/[0.97]"]))
+        expect(uss).toMatch(/rgba\(\s*255\s*,\s*87\s*,\s*51\s*,\s*0\.97\s*\)/)
+    })
+
     it("generates USS with breakpoint ancestor selector", () => {
         const uss = generateUSS(new Set(["lg:p-8"]))
         expect(uss).toContain(".lg .lg_c_p-8")

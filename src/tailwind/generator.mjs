@@ -407,17 +407,30 @@ function parseArbitraryValue(className) {
 // ============================================================================
 
 /**
- * Detect Tailwind-style "<name>/<N>" opacity modifier where N is 0–100.
+ * Detect Tailwind-style opacity modifiers:
+ *   - `<name>/<N>` where N is an integer 0–100 (percentage)
+ *   - `<name>/[<D>]` where D is a decimal 0.0–1.0 (arbitrary value syntax)
  * Returns { base, opacity: 0..1 } or null.
  */
 function parseOpacityModifier(className) {
     const slashIdx = className.lastIndexOf("/")
     if (slashIdx <= 0) return null
     const opacityStr = className.slice(slashIdx + 1)
-    if (!/^\d+$/.test(opacityStr)) return null
-    const pct = parseInt(opacityStr, 10)
-    if (pct < 0 || pct > 100) return null
-    return { base: className.slice(0, slashIdx), opacity: pct / 100 }
+
+    let opacity
+    if (/^\d+$/.test(opacityStr)) {
+        const pct = parseInt(opacityStr, 10)
+        if (pct < 0 || pct > 100) return null
+        opacity = pct / 100
+    } else if (/^\[[\d.]+\]$/.test(opacityStr)) {
+        const decimal = parseFloat(opacityStr.slice(1, -1))
+        if (Number.isNaN(decimal) || decimal < 0 || decimal > 1) return null
+        opacity = decimal
+    } else {
+        return null
+    }
+
+    return { base: className.slice(0, slashIdx), opacity }
 }
 
 /**
