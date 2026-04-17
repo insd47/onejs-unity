@@ -374,6 +374,8 @@ function parseArbitraryValue(className) {
         "translate-x": "translate",
         "translate-y": "translate",
         "translate": "translate",
+        "duration": "transition-duration",
+        "delay": "transition-delay",
     }
 
     const property = propertyMap[prefix]
