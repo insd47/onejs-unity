@@ -373,6 +373,9 @@ function parseArbitraryValue(className) {
         "scale": "scale",
         "translate-x": "translate",
         "translate-y": "translate",
+        "translate": "translate",
+        "duration": "transition-duration",
+        "delay": "transition-delay",
     }
 
     const property = propertyMap[prefix]
@@ -383,6 +386,14 @@ function parseArbitraryValue(className) {
         value = `${value} 0`
     } else if (prefix === "translate-y") {
         value = `0 ${value}`
+    } else if (prefix === "translate") {
+        // Two-component translate uses underscore as the value separator, e.g.
+        //   translate-[-50%_50%] → "-50% 50%"
+        // Bare numbers (no unit) default to px like the single-axis case.
+        value = value.split("_").map((v) => {
+            if (/^-?\d+(\.\d+)?$/.test(v)) return `${v}px`
+            return v
+        }).join(" ")
     }
 
     // Handle multi-property values
@@ -391,6 +402,84 @@ function parseArbitraryValue(className) {
     }
 
     return { [property]: value }
+}
+
+// ============================================================================
+// Opacity modifier ("bg-primary-bg/95")
+// ============================================================================
+
+/**
+ * Detect Tailwind-style opacity modifiers:
+ *   - `<name>/<N>` where N is an integer 0–100 (percentage)
+ *   - `<name>/[<D>]` where D is a decimal 0.0–1.0 (arbitrary value syntax)
+ * Returns { base, opacity: 0..1 } or null.
+ */
+function parseOpacityModifier(className) {
+    const slashIdx = className.lastIndexOf("/")
+    if (slashIdx <= 0) return null
+    const opacityStr = className.slice(slashIdx + 1)
+
+    let opacity
+    if (/^\d+$/.test(opacityStr)) {
+        const pct = parseInt(opacityStr, 10)
+        if (pct < 0 || pct > 100) return null
+        opacity = pct / 100
+    } else if (/^\[[\d.]+\]$/.test(opacityStr)) {
+        const decimal = parseFloat(opacityStr.slice(1, -1))
+        if (Number.isNaN(decimal) || decimal < 0 || decimal > 1) return null
+        opacity = decimal
+    } else {
+        return null
+    }
+
+    return { base: className.slice(0, slashIdx), opacity }
+}
+
+/**
+ * Convert `#rgb` / `#rrggbb` / `#rrggbbaa` to `rgba(r, g, b, a)` with the
+ * supplied alpha. If the hex already carries alpha we multiply rather than
+ * replace so stacking opacity modifiers on pre-transparent colors composes.
+ */
+function hexToRgba(hex, alpha) {
+    let h = hex.replace(/^#/, "")
+    let a = 1
+    if (h.length === 3 || h.length === 4) {
+        h = h.split("").map((c) => c + c).join("")
+    }
+    if (h.length === 8) {
+        a = parseInt(h.slice(6, 8), 16) / 255
+        h = h.slice(0, 6)
+    }
+    if (h.length !== 6) return null
+    const r = parseInt(h.slice(0, 2), 16)
+    const g = parseInt(h.slice(2, 4), 16)
+    const b = parseInt(h.slice(4, 6), 16)
+    if ([r, g, b].some(Number.isNaN)) return null
+    const finalA = +(a * alpha).toFixed(3)
+    return `rgba(${r}, ${g}, ${b}, ${finalA})`
+}
+
+/**
+ * Clone declarations, applying opacity to any recognisably-color values.
+ * Hex → rgba(); `rgb(...)` → `rgba(...)`; other string values are passed
+ * through unchanged (e.g. USS variable references).
+ */
+function applyOpacityToDeclarations(decls, opacity) {
+    const result = {}
+    for (const [prop, value] of Object.entries(decls)) {
+        if (typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value)) {
+            const rgba = hexToRgba(value, opacity)
+            result[prop] = rgba ?? value
+        } else if (typeof value === "string" && /^rgb\(/i.test(value)) {
+            const m = value.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i)
+            result[prop] = m
+                ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${opacity.toFixed(3)})`
+                : value
+        } else {
+            result[prop] = value
+        }
+    }
+    return result
 }
 
 /**
@@ -413,7 +502,26 @@ export function generateUSS(classNames, options = {}) {
         // Look up the base utility
         let declarations = allUtilities[base]
 
-        // If not found, try to parse as arbitrary value
+        // Tailwind color/opacity modifier: "<color-utility>/<N>".
+        // Built-in colors are already pre-expanded with opacity in
+        // `utilities.mjs` (8-digit hex), so this fallback only fires for
+        // user-injected colors (via tailwind.config.js extend.colors) and
+        // arbitrary hex values like `bg-[#ff5733]/50`.
+        if (!declarations) {
+            const mod = parseOpacityModifier(base)
+            if (mod) {
+                const baseDecls =
+                    allUtilities[mod.base] ?? parseArbitraryValue(mod.base)
+                if (baseDecls) {
+                    declarations = applyOpacityToDeclarations(
+                        baseDecls,
+                        mod.opacity,
+                    )
+                }
+            }
+        }
+
+        // If still not found, try to parse as arbitrary value
         if (!declarations) {
             declarations = parseArbitraryValue(base)
         }
@@ -434,8 +542,22 @@ export function generateUSS(classNames, options = {}) {
         // sibling combinator, NOT a pseudo-class on the target element. Naive
         // `${selector}:${variant}` produced e.g. `.group-focus_c_X:group-focus`
         // which Unity's USS parser rejects with "Unknown pseudo class 'group-focus'".
+        //
+        // Arbitrary variants wrap a raw selector fragment in square brackets,
+        // e.g. `[&>TextElement]:ml-[6px]`. `&` stands for the current class
+        // selector and must be substituted in; the brackets are stripped.
+        // Without this, `:${variant}` produced `.escaped:[&>TextElement]`
+        // which is invalid USS.
         let selector
-        if (variant && variant.startsWith("group-")) {
+        if (variant && variant.startsWith("[") && variant.endsWith("]")) {
+            const rawSelector = variant.slice(1, -1)
+            selector = rawSelector.replace(/&/g, `.${escapedClass}`)
+        } else if (variant === "*") {
+            // Tailwind's `*` variant targets every direct child, not the
+            // element itself. Attaching `:*` as a pseudo-class would be
+            // invalid USS — emit a universal-child combinator instead.
+            selector = `.${escapedClass} > *`
+        } else if (variant && variant.startsWith("group-")) {
             const pseudo = variant.slice("group-".length)
             selector = `.group:${pseudo} .${escapedClass}`
         } else if (variant && variant.startsWith("peer-")) {

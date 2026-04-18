@@ -392,6 +392,69 @@ describe("generateUSS", () => {
         expect(uss).not.toContain(":peer-focus")
     })
 
+    it("expands [&>child] arbitrary variant to a descendant selector", () => {
+        // [&>TextElement]:bg-blue-500 must substitute & with the class
+        // selector and produce ".lb_amp_gt_TextElement_rb_c_bg-blue-500>TextElement",
+        // not attach the raw bracket string as a pseudo-class (which Unity
+        // USS would reject).
+        const uss = generateUSS(new Set(["[&>TextElement]:bg-blue-500"]))
+        expect(uss).toContain(
+            "._lb__amp__gt_TextElement_rb__c_bg-blue-500>TextElement",
+        )
+        expect(uss).not.toContain(":[&")
+        expect(uss).not.toContain(":&")
+    })
+
+    it("expands [&.my-state] arbitrary variant to a compound selector", () => {
+        const uss = generateUSS(new Set(["[&.active]:bg-blue-500"]))
+        expect(uss).toContain(
+            "._lb__amp__d_active_rb__c_bg-blue-500.active",
+        )
+    })
+
+    it("supports arbitrary two-value translate via underscore", () => {
+        // translate-[-50%_50%] must emit `translate: -50% 50%`, not treat
+        // the underscore literally or leave the value unsplit. Escape: `%`
+        // becomes `_p_`; the literal underscore between the two values is
+        // preserved as-is, so the escaped class ends `...50_p__50_p__rb_`.
+        const uss = generateUSS(new Set(["translate-[-50%_50%]"]))
+        expect(uss).toContain("translate-_lb_-50_p__50_p__rb_")
+        expect(uss).toContain("translate: -50% 50%")
+    })
+
+    it("applies tailwind /N opacity modifier to arbitrary hex colors", () => {
+        // Built-in colors are pre-expanded with opacity in utilities.mjs
+        // (8-digit hex), so this codepath is exercised by arbitrary values
+        // and user-injected colors. Use an arbitrary hex here as the
+        // test-reachable surrogate for user colors.
+        const uss = generateUSS(new Set(["bg-[#ff5733]/50"]))
+        expect(uss).toMatch(/rgba\(\s*255\s*,\s*87\s*,\s*51\s*,\s*0\.5\s*\)/)
+    })
+
+    it("applies tailwind /[0.xx] arbitrary-decimal opacity modifier", () => {
+        const uss = generateUSS(new Set(["bg-[#ff5733]/[0.97]"]))
+        expect(uss).toMatch(/rgba\(\s*255\s*,\s*87\s*,\s*51\s*,\s*0\.97\s*\)/)
+    })
+
+    it("expands * variant to a universal-child combinator", () => {
+        // `*:opacity-50` must target direct children, not the element itself.
+        // Naive `${selector}:${variant}` would emit `.escaped:*` (invalid).
+        const uss = generateUSS(new Set(["*:opacity-50"]))
+        expect(uss).toContain("._ast__c_opacity-50 > *")
+        expect(uss).not.toMatch(/\._ast__c_opacity-50:/)
+    })
+
+    it("supports arbitrary transition-duration / delay values", () => {
+        // `duration-[1.5s]` and `delay-[500ms]` must map to
+        // `transition-duration` / `transition-delay` — not be skipped as
+        // unknown utilities. Users supply the time unit explicitly.
+        const uss = generateUSS(
+            new Set(["duration-[1.5s]", "delay-[500ms]"]),
+        )
+        expect(uss).toContain("transition-duration: 1.5s")
+        expect(uss).toContain("transition-delay: 500ms")
+    })
+
     it("generates USS with breakpoint ancestor selector", () => {
         const uss = generateUSS(new Set(["lg:p-8"]))
         expect(uss).toContain(".lg .lg_c_p-8")
